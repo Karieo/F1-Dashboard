@@ -1,0 +1,1430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>F1 Live Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-0: #0a0c0e;
+    --bg-1: #111417;
+    --bg-2: #181c20;
+    --bg-3: #20252a;
+    --border: #262b30;
+    --border-strong: #343a41;
+    --text-0: #eef1f3;
+    --text-1: #9aa3ac;
+    --text-2: #5f676f;
+    --accent: #00d4ff;
+    --accent-dim: #0a4a57;
+    --danger: #ff4d4f;
+    --warn: #ffb020;
+    --good: #33d17a;
+    --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --radius: 6px;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg-0);
+    color: var(--text-0);
+    font-family: var(--sans);
+    height: 100%;
+  }
+
+  #app {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+  }
+
+  /* ---------- Top strip ---------- */
+  #top-strip {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 10px 16px;
+    background: var(--bg-1);
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+
+  .session-info {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  .session-info h1 {
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    margin: 0;
+    white-space: nowrap;
+  }
+
+  #circuit-name {
+    color: var(--text-1);
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .pill {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--border-strong);
+    color: var(--text-1);
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .pill.live { color: var(--good); border-color: var(--good); }
+  .pill.upcoming { color: var(--warn); border-color: var(--warn); }
+  .pill.ended { color: var(--text-2); border-color: var(--border-strong); }
+
+  #weather-chips {
+    display: flex;
+    gap: 10px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-1);
+    flex-wrap: wrap;
+  }
+  #weather-chips span { white-space: nowrap; }
+  #weather-chips .rain { color: var(--accent); }
+
+  .connection {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-1);
+    white-space: nowrap;
+  }
+
+  .conn-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-2);
+    flex-shrink: 0;
+  }
+  .conn-dot.live { background: var(--good); box-shadow: 0 0 0 0 rgba(51,209,122,0.6); animation: pulse 2s infinite; }
+  .conn-dot.retrying { background: var(--warn); }
+  .conn-dot.offline { background: var(--danger); }
+
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(51,209,122,0.5); }
+    70% { box-shadow: 0 0 0 6px rgba(51,209,122,0); }
+    100% { box-shadow: 0 0 0 0 rgba(51,209,122,0); }
+  }
+
+  /* ---------- Race control strip ---------- */
+  #race-control-strip {
+    background: var(--bg-2);
+    border-bottom: 1px solid var(--border);
+    overflow: hidden;
+    padding: 6px 0;
+  }
+  #rc-track {
+    display: flex;
+    gap: 24px;
+    white-space: nowrap;
+    overflow-x: auto;
+    scroll-behavior: smooth;
+    padding: 0 16px;
+    font-family: var(--mono);
+    font-size: 11px;
+    scrollbar-width: none;
+  }
+  #rc-track::-webkit-scrollbar { display: none; }
+  .rc-item { color: var(--text-1); display: flex; gap: 6px; align-items: center; }
+  .rc-item .rc-lap { color: var(--text-2); }
+  .rc-item.flag-yellow, .rc-item.flag-doubleyellow { color: var(--warn); }
+  .rc-item.flag-red { color: var(--danger); }
+  .rc-item.flag-green { color: var(--good); }
+  .rc-item.flag-chequered { color: var(--text-0); }
+  .rc-empty { color: var(--text-2); font-family: var(--mono); font-size: 11px; padding: 0 16px; }
+
+  /* ---------- Fallback banner ---------- */
+  #fallback-banner {
+    background: linear-gradient(90deg, var(--accent-dim), transparent);
+    border-bottom: 1px solid var(--border);
+    padding: 8px 16px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-1);
+  }
+  #fallback-banner.hidden { display: none; }
+
+  /* ---------- Main grid ---------- */
+  #grid {
+    flex: 1;
+    display: grid;
+    grid-template-columns: minmax(300px, 380px) 1fr;
+    gap: 12px;
+    padding: 12px 16px;
+    align-items: start;
+  }
+  @media (max-width: 860px) {
+    #grid { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: var(--bg-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  .panel-head {
+    padding: 10px 14px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-1);
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* ---------- Leaderboard ---------- */
+  #leaderboard-panel { position: sticky; top: 12px; }
+  #leaderboard-body { max-height: calc(100vh - 160px); overflow-y: auto; }
+
+  .lb-row {
+    display: grid;
+    grid-template-columns: 26px 20px 1fr auto auto;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 12px;
+    border-bottom: 1px solid var(--border);
+    border-left: 3px solid transparent;
+    cursor: pointer;
+    font-family: var(--mono);
+    font-size: 12px;
+    transition: background 0.15s;
+  }
+  .lb-row:hover { background: var(--bg-2); }
+  .lb-row.selected { background: var(--bg-3); border-left-color: var(--accent); }
+  .lb-row:last-child { border-bottom: none; }
+
+  .lb-pos { color: var(--text-1); font-weight: 700; }
+  .lb-number { color: var(--text-2); font-size: 10px; }
+  .lb-name { color: var(--text-0); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lb-gap { color: var(--text-1); font-size: 11px; text-align: right; }
+
+  .tyre-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 16px;
+    border-radius: 3px;
+    font-size: 9px;
+    font-weight: 700;
+    color: #0a0c0e;
+    flex-shrink: 0;
+  }
+  .tyre-badge.compound-soft { background: #e8384f; }
+  .tyre-badge.compound-medium { background: #f5d033; }
+  .tyre-badge.compound-hard { background: #f0f0f0; }
+  .tyre-badge.compound-intermediate { background: #3fbf5f; }
+  .tyre-badge.compound-wet { background: #2d7ff0; }
+  .tyre-badge.compound-unknown { background: var(--text-2); color: var(--text-0); }
+  .tyre-age { color: var(--text-2); font-size: 9px; margin-left: 3px; }
+
+  /* ---------- Detail panel / tabs ---------- */
+  #tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+  }
+  .tab-btn {
+    background: none;
+    border: none;
+    color: var(--text-1);
+    font-family: var(--sans);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 12px 16px;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    white-space: nowrap;
+  }
+  .tab-btn:hover { color: var(--text-0); }
+  .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  .tab-panel { display: none; padding: 16px; }
+  .tab-panel.active { display: block; }
+
+  /* ---------- Telemetry ---------- */
+  .driver-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .driver-swatch { width: 6px; height: 34px; border-radius: 3px; flex-shrink: 0; }
+  .driver-header h2 { margin: 0; font-size: 18px; }
+  .driver-header .team { color: var(--text-1); font-size: 12px; font-family: var(--mono); }
+
+  .gauge-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .gauge {
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px 12px;
+  }
+  .gauge-label {
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-2);
+    margin-bottom: 6px;
+  }
+  .gauge-value {
+    font-family: var(--mono);
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text-0);
+  }
+  .gauge-unit { font-size: 11px; color: var(--text-2); font-weight: 400; margin-left: 3px; }
+  .gauge-bar-track {
+    margin-top: 8px;
+    height: 5px;
+    background: var(--bg-3);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .gauge-bar-fill { height: 100%; background: var(--accent); transition: width 0.2s linear; }
+  .gauge-bar-fill.throttle { background: var(--good); }
+  .gauge-bar-fill.brake { background: var(--danger); }
+  .gauge.drs-off .gauge-value { color: var(--text-2); }
+  .gauge.drs-eligible .gauge-value { color: var(--warn); }
+  .gauge.drs-on .gauge-value { color: var(--good); }
+
+  .sparkline-box {
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px;
+    margin-bottom: 16px;
+  }
+  .sparkline-box svg { width: 100%; height: 60px; display: block; }
+
+  .lap-readout {
+    display: flex;
+    gap: 24px;
+    font-family: var(--mono);
+  }
+  .lap-readout .stat-label { font-size: 10px; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.06em; }
+  .lap-readout .stat-value { font-size: 16px; font-weight: 700; color: var(--text-0); }
+
+  .empty-state {
+    color: var(--text-2);
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 24px 0;
+    text-align: center;
+  }
+
+  /* ---------- Track tab ---------- */
+  #track-map-wrap {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  #track-svg-container, #track-overlay {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+  #track-svg-container svg { width: 100%; height: 100%; display: block; }
+  #track-svg-container svg path,
+  #track-svg-container svg polyline,
+  #track-svg-container svg line {
+    stroke: var(--text-1) !important;
+    fill: none !important;
+    stroke-width: 2.2;
+  }
+  #track-overlay { pointer-events: none; }
+  .track-note {
+    margin-top: 10px;
+    color: var(--text-2);
+    font-family: var(--mono);
+    font-size: 11px;
+  }
+
+  /* ---------- Tyres & Pits tab ---------- */
+  table.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+  table.data-table th {
+    text-align: left;
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-2);
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--border-strong);
+  }
+  table.data-table td {
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-0);
+  }
+  table.data-table tr:last-child td { border-bottom: none; }
+  .section-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-1);
+    margin: 20px 0 8px;
+  }
+  .section-label:first-child { margin-top: 0; }
+
+  /* ---------- Standings tab ---------- */
+  .standings-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  @media (max-width: 640px) {
+    .standings-grid { grid-template-columns: 1fr; }
+  }
+  .stale-note {
+    color: var(--warn);
+    font-family: var(--mono);
+    font-size: 10px;
+    margin-top: 8px;
+  }
+
+  /* ---------- Radio tab ---------- */
+  .radio-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .radio-item:last-child { border-bottom: none; }
+  .radio-meta { font-family: var(--mono); font-size: 11px; color: var(--text-1); min-width: 130px; }
+  .radio-item audio { flex: 1; height: 32px; }
+
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <header id="top-strip">
+    <div class="session-info">
+      <h1 id="session-name">F1 Live Dashboard</h1>
+      <span id="circuit-name">—</span>
+      <span id="session-status" class="pill">connecting</span>
+    </div>
+    <div id="weather-chips"></div>
+    <div class="connection">
+      <span class="conn-dot" id="conn-dot"></span>
+      <span id="conn-label">Connecting…</span>
+    </div>
+  </header>
+
+  <div id="race-control-strip">
+    <div id="rc-track"><span class="rc-empty">Waiting for race control messages…</span></div>
+  </div>
+
+  <div id="fallback-banner" class="hidden">
+    <p id="fallback-text" style="margin:0;"></p>
+  </div>
+
+  <main id="grid">
+    <section id="leaderboard-panel" class="panel">
+      <div class="panel-head">Leaderboard</div>
+      <div id="leaderboard-body">
+        <div class="empty-state">No timing data yet.</div>
+      </div>
+    </section>
+
+    <section id="detail-panel" class="panel">
+      <nav id="tabs">
+        <button class="tab-btn active" data-tab="telemetry">Telemetry</button>
+        <button class="tab-btn" data-tab="track">Track</button>
+        <button class="tab-btn" data-tab="tyres">Tyres &amp; Pits</button>
+        <button class="tab-btn" data-tab="standings">Standings</button>
+        <button class="tab-btn" data-tab="radio">Radio</button>
+      </nav>
+
+      <div class="tab-panels">
+        <div class="tab-panel active" id="panel-telemetry">
+          <div id="telemetry-content"><div class="empty-state">Select a driver from the leaderboard.</div></div>
+        </div>
+
+        <div class="tab-panel" id="panel-track">
+          <div id="track-map-wrap">
+            <div id="track-svg-container"></div>
+            <svg id="track-overlay"></svg>
+          </div>
+          <div class="track-note" id="track-note">Waiting for circuit data…</div>
+        </div>
+
+        <div class="tab-panel" id="panel-tyres">
+          <div id="tyres-content"><div class="empty-state">No stint data yet.</div></div>
+        </div>
+
+        <div class="tab-panel" id="panel-standings">
+          <div id="standings-content"><div class="empty-state">Loading standings…</div></div>
+        </div>
+
+        <div class="tab-panel" id="panel-radio">
+          <div id="radio-content"><div class="empty-state">No radio messages yet.</div></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* =========================================================================
+   * CONFIG
+   * ========================================================================= */
+
+  const OPENF1_BASE = 'https://api.openf1.org/v1';
+  // Ergast-compatible successor API; schema assumed to mirror the classic
+  // Ergast response shape (MRData.StandingsTable.StandingsLists[0]...).
+  const JOLPICA_BASE = 'https://api.jolpi.ca/ergast/f1';
+  const F1DB_CIRCUITS_API = 'https://api.github.com/repos/f1db/f1db/contents/src/assets/circuits/black-outline';
+
+  // Poll tiers (ms). Budget check against OpenF1's ~30 req/10s limit:
+  // worst case is the Telemetry tab active -> 3 fast tasks every 4s (~2.5
+  // req/10s each = ~7.5/10s) + 3 medium tasks every 15s (~2/10s) + 2 slow
+  // + 2 meta, comfortably under the ceiling even with polling jitter.
+  const TIER_FAST = 4000;     // positions, intervals, car_data (selected driver), location (Track tab)
+  const TIER_MEDIUM = 15000;  // laps (selected driver), stints, pit, team_radio (Radio tab)
+  const TIER_SLOW = 60000;    // weather, race_control
+  const TIER_META = 600000;   // drivers, session/meeting info
+  const TIER_STANDINGS = 600000; // Jolpica, not session-scoped
+
+  const SPARKLINE_WINDOW_MS = 60000;
+  const FAILURE_RETRY_THRESHOLD = 3; // consecutive failures before "offline"
+
+  const TYRE_COLOR_CLASS = {
+    SOFT: 'compound-soft',
+    MEDIUM: 'compound-medium',
+    HARD: 'compound-hard',
+    INTERMEDIATE: 'compound-intermediate',
+    WET: 'compound-wet'
+  };
+
+  // Fallback only — team_colour from /drivers is the primary source since
+  // liveries/colors change season to season.
+  const TEAM_COLOR_FALLBACK = {
+    'Red Bull Racing': 'e0002a',
+    'Ferrari': 'dc0000',
+    'Mercedes': '00d7b6',
+    'McLaren': 'ff8000',
+    'Aston Martin': '229971',
+    'Alpine': 'ff87bc',
+    'Williams': '64c4ff',
+    'RB': '6692ff',
+    'Kick Sauber': '52e252',
+    'Haas F1 Team': 'b6babd'
+  };
+
+  // Best-effort OpenF1 circuit_short_name -> F1DB circuit-id map, built from
+  // Ergast-style circuitId conventions. F1DB's actual ids may differ in
+  // edge cases; unknown circuits just skip the track map gracefully.
+  const CIRCUIT_ID_MAP = {
+    'Sakhir': 'bahrain',
+    'Jeddah': 'jeddah',
+    'Melbourne': 'albert_park',
+    'Suzuka': 'suzuka',
+    'Shanghai': 'shanghai',
+    'Miami': 'miami',
+    'Imola': 'imola',
+    'Monaco': 'monaco',
+    'Catalunya': 'catalunya',
+    'Montreal': 'villeneuve',
+    'Spielberg': 'red_bull_ring',
+    'Silverstone': 'silverstone',
+    'Spa-Francorchamps': 'spa',
+    'Zandvoort': 'zandvoort',
+    'Monza': 'monza',
+    'Baku': 'baku',
+    'Marina Bay': 'marina_bay',
+    'Austin': 'americas',
+    'Mexico City': 'rodriguez',
+    'Interlagos': 'interlagos',
+    'Las Vegas': 'las_vegas',
+    'Lusail': 'losail',
+    'Yas Marina': 'yas_marina'
+  };
+
+  /* =========================================================================
+   * STATE
+   * ========================================================================= */
+
+  const state = {
+    sessionKey: null,
+    meetingKey: null,
+    circuitShortName: null,
+    sessionInfo: null,
+    isLive: false,
+
+    drivers: new Map(),        // driver_number -> driver row
+    positions: [],              // current leaderboard, sorted
+    intervalsByDriver: new Map(),
+    stintsByDriver: new Map(),  // driver_number -> current stint row
+    pitLog: [],                 // most-recent-first
+    weather: null,
+    raceControl: [],            // most-recent-last, capped at 10
+    locationByDriver: new Map(),
+    trackBounds: null,          // { minX, maxX, minY, maxY }
+    trackViewBox: null,         // { x, y, w, h }
+    radioMessages: [],
+
+    selectedDriver: null,
+    currentTab: 'telemetry',
+
+    carDataBuffer: new Map(),   // driver_number -> [{t, speed, throttle, brake, n_gear, rpm, drs}]
+    lastLap: new Map(),         // driver_number -> lap row
+
+    standings: { drivers: null, constructors: null, fetchedAt: null, error: null },
+
+    circuitSvgCache: new Map(), // circuit-id -> raw svg text (or null if unavailable)
+
+    connectionFailures: 0
+  };
+
+  /* =========================================================================
+   * UTILITIES
+   * ========================================================================= */
+
+  function qs(params) {
+    return Object.entries(params)
+      .filter(([, v]) => v !== undefined && v !== null)
+      .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+      .join('&');
+  }
+
+  async function fetchJSON(url, opts) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    try {
+      const res = await fetch(url, { signal: controller.signal, ...(opts || {}) });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.json();
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  function latestPerDriver(rows, keyField, dateField) {
+    keyField = keyField || 'driver_number';
+    dateField = dateField || 'date';
+    const map = new Map();
+    for (const row of rows || []) {
+      const k = row[keyField];
+      const prev = map.get(k);
+      if (!prev || new Date(row[dateField]) >= new Date(prev[dateField])) map.set(k, row);
+    }
+    return map;
+  }
+
+  function currentStints(rows) {
+    const map = new Map();
+    for (const row of rows || []) {
+      const k = row.driver_number;
+      const prev = map.get(k);
+      if (!prev || row.stint_number >= prev.stint_number) map.set(k, row);
+    }
+    return map;
+  }
+
+  function fmtGap(v) {
+    if (v === null || v === undefined) return 'LEADER';
+    if (typeof v === 'string') return v;
+    return `+${v.toFixed(3)}`;
+  }
+
+  function fmtInterval(v) {
+    if (v === null || v === undefined) return '—';
+    if (typeof v === 'string') return v;
+    return `+${v.toFixed(3)}`;
+  }
+
+  function fmtLapTime(seconds) {
+    if (seconds === null || seconds === undefined) return '—';
+    const m = Math.floor(seconds / 60);
+    const s = (seconds - m * 60).toFixed(3).padStart(6, '0');
+    return `${m}:${s}`;
+  }
+
+  function driverColor(driver) {
+    if (driver && driver.team_colour) return `#${driver.team_colour}`;
+    const fallback = driver && TEAM_COLOR_FALLBACK[driver.team_name];
+    return fallback ? `#${fallback}` : '#5f676f';
+  }
+
+  function driverLabel(driver, number) {
+    if (!driver) return `#${number}`;
+    return driver.name_acronym || driver.broadcast_name || `#${number}`;
+  }
+
+  function escapeHtml(str) {
+    return String(str ?? '').replace(/[&<>"']/g, (c) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+  }
+
+  /* =========================================================================
+   * SCHEDULER
+   * ========================================================================= */
+
+  const Scheduler = (() => {
+    const tasks = new Map();
+    let timer = null;
+
+    function register(id, { tier, run, tab, immediate }) {
+      tasks.set(id, { tier, run, tab: tab || null, lastRun: 0 });
+      if (immediate !== false) runTask(id);
+    }
+
+    function runTask(id) {
+      const t = tasks.get(id);
+      if (!t) return;
+      t.lastRun = Date.now();
+      Promise.resolve(t.run()).catch((err) => console.error(`[scheduler:${id}]`, err));
+    }
+
+    function tick() {
+      const now = Date.now();
+      for (const [id, t] of tasks) {
+        if (t.tab && state.currentTab !== t.tab) continue;
+        if (now - t.lastRun >= t.tier) runTask(id);
+      }
+    }
+
+    function bump(id) { runTask(id); }
+    function bumpTab(tab) {
+      for (const [id, t] of tasks) if (t.tab === tab) runTask(id);
+    }
+
+    function start() {
+      if (timer) return;
+      timer = setInterval(tick, 1000);
+    }
+
+    return { register, bump, bumpTab, start };
+  })();
+
+  /* =========================================================================
+   * DATA FETCHERS
+   * ========================================================================= */
+
+  async function detectSession() {
+    let rows;
+    try {
+      rows = await fetchJSON(`${OPENF1_BASE}/sessions?${qs({ session_key: 'latest' })}`);
+      state.connectionFailures = 0;
+    } catch (err) {
+      state.connectionFailures++;
+      updateConnectionUI();
+      updateFallbackBanner();
+      return;
+    }
+
+    const session = Array.isArray(rows) ? rows[0] : null;
+    if (!session) {
+      state.isLive = false;
+      updateFallbackBanner();
+      updateConnectionUI();
+      return;
+    }
+
+    const now = new Date();
+    const start = new Date(session.date_start);
+    const end = new Date(session.date_end);
+    state.isLive = now >= start && now <= end;
+    state.sessionInfo = session;
+
+    const changed = session.session_key !== state.sessionKey;
+    state.sessionKey = session.session_key;
+    state.meetingKey = session.meeting_key;
+    state.circuitShortName = session.circuit_short_name;
+
+    renderTopStrip();
+    updateFallbackBanner();
+    updateConnectionUI();
+
+    if (changed) {
+      // New session: reset per-session buffers and force an immediate
+      // refresh of everything meta/session-scoped.
+      state.drivers.clear();
+      state.stintsByDriver.clear();
+      state.pitLog = [];
+      state.raceControl = [];
+      state.locationByDriver.clear();
+      state.trackBounds = null;
+      state.carDataBuffer.clear();
+      state.lastLap.clear();
+      state.selectedDriver = null;
+      Scheduler.bump('drivers');
+      Scheduler.bump('weather');
+      Scheduler.bump('raceControl');
+      maybeLoadTrackSvg();
+    }
+  }
+
+  async function fetchDrivers() {
+    if (!state.sessionKey) return;
+    const rows = await fetchJSON(`${OPENF1_BASE}/drivers?${qs({ session_key: state.sessionKey })}`);
+    state.drivers.clear();
+    for (const d of rows) state.drivers.set(d.driver_number, d);
+    renderLeaderboard();
+    renderTyresPitsTab();
+  }
+
+  async function fetchPositions() {
+    if (!state.sessionKey) return;
+    let rows;
+    try {
+      rows = await fetchJSON(`${OPENF1_BASE}/position?${qs({ session_key: state.sessionKey })}`);
+      state.connectionFailures = 0;
+    } catch (err) {
+      state.connectionFailures++;
+      updateConnectionUI();
+      updateFallbackBanner();
+      return;
+    }
+    const latest = latestPerDriver(rows);
+    state.positions = [...latest.values()].sort((a, b) => a.position - b.position);
+    if (!state.selectedDriver && state.positions.length) {
+      state.selectedDriver = state.positions[0].driver_number;
+    }
+    updateConnectionUI();
+    renderLeaderboard();
+    renderTelemetryTab();
+  }
+
+  async function fetchIntervals() {
+    if (!state.sessionKey) return;
+    const rows = await fetchJSON(`${OPENF1_BASE}/intervals?${qs({ session_key: state.sessionKey })}`);
+    state.intervalsByDriver = latestPerDriver(rows);
+    renderLeaderboard();
+  }
+
+  async function fetchCarData() {
+    if (!state.sessionKey || !state.selectedDriver) return;
+    const rows = await fetchJSON(`${OPENF1_BASE}/car_data?${qs({
+      session_key: state.sessionKey,
+      driver_number: state.selectedDriver
+    })}`);
+    if (!rows || !rows.length) return;
+    const buf = state.carDataBuffer.get(state.selectedDriver) || [];
+    const cutoff = Date.now() - SPARKLINE_WINDOW_MS;
+    for (const r of rows) {
+      buf.push({ t: new Date(r.date).getTime(), speed: r.speed, throttle: r.throttle, brake: r.brake, n_gear: r.n_gear, rpm: r.rpm, drs: r.drs });
+    }
+    const trimmed = buf.filter((p) => p.t >= cutoff).sort((a, b) => a.t - b.t);
+    state.carDataBuffer.set(state.selectedDriver, trimmed);
+    renderTelemetryTab();
+  }
+
+  async function fetchLaps() {
+    if (!state.sessionKey || !state.selectedDriver) return;
+    const rows = await fetchJSON(`${OPENF1_BASE}/laps?${qs({
+      session_key: state.sessionKey,
+      driver_number: state.selectedDriver
+    })}`);
+    if (!rows || !rows.length) return;
+    const completed = rows.filter((r) => r.lap_duration).sort((a, b) => a.lap_number - b.lap_number);
+    if (completed.length) state.lastLap.set(state.selectedDriver, completed[completed.length - 1]);
+    renderTelemetryTab();
+  }
+
+  // Deviation from the spec's "medium tier: laps/stints/pit — selected
+  // driver only": OpenF1's /stints and /pit already return ALL drivers in a
+  // single call (they aren't priced per-driver like car_data), and the
+  // leaderboard tyre badges + pit log need every driver's data anyway, so
+  // these are fetched unfiltered without adding extra requests.
+  async function fetchStints() {
+    if (!state.sessionKey) return;
+    const rows = await fetchJSON(`${OPENF1_BASE}/stints?${qs({ session_key: state.sessionKey })}`);
+    state.stintsByDriver = currentStints(rows);
+    renderLeaderboard();
+    renderTyresPitsTab();
+  }
+
+  async function fetchPit() {
+    if (!state.sessionKey) return;
+    const rows = await fetchJSON(`${OPENF1_BASE}/pit?${qs({ session_key: state.sessionKey })}`);
+    state.pitLog = (rows || []).slice().sort((a, b) => new Date(b.date) - new Date(a.date));
+    renderTyresPitsTab();
+  }
+
+  async function fetchWeather() {
+    if (!state.sessionKey) return;
+    const rows = await fetchJSON(`${OPENF1_BASE}/weather?${qs({ session_key: state.sessionKey })}`);
+    if (rows && rows.length) state.weather = rows[rows.length - 1];
+    renderWeatherChips();
+  }
+
+  async function fetchRaceControl() {
+    if (!state.sessionKey) return;
+    const rows = await fetchJSON(`${OPENF1_BASE}/race_control?${qs({ session_key: state.sessionKey })}`);
+    state.raceControl = (rows || []).slice().sort((a, b) => new Date(a.date) - new Date(b.date)).slice(-10);
+    renderRaceControlStrip();
+  }
+
+  async function fetchLocation() {
+    if (!state.sessionKey) return;
+    const rows = await fetchJSON(`${OPENF1_BASE}/location?${qs({ session_key: state.sessionKey })}`);
+    const latest = latestPerDriver(rows);
+    state.locationByDriver = latest;
+
+    if (!state.trackBounds) state.trackBounds = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity };
+    const b = state.trackBounds;
+    for (const row of latest.values()) {
+      if (row.x < b.minX) b.minX = row.x;
+      if (row.x > b.maxX) b.maxX = row.x;
+      if (row.y < b.minY) b.minY = row.y;
+      if (row.y > b.maxY) b.maxY = row.y;
+    }
+    renderTrackTab();
+  }
+
+  async function fetchTeamRadio() {
+    if (!state.sessionKey) return;
+    const rows = await fetchJSON(`${OPENF1_BASE}/team_radio?${qs({ session_key: state.sessionKey })}`);
+    state.radioMessages = (rows || []).slice().sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 25);
+    renderRadioTab();
+  }
+
+  async function fetchStandings() {
+    try {
+      const [driverData, constructorData] = await Promise.all([
+        fetchJSON(`${JOLPICA_BASE}/current/driverStandings.json`),
+        fetchJSON(`${JOLPICA_BASE}/current/constructorStandings.json`)
+      ]);
+      const driverList = driverData?.MRData?.StandingsTable?.StandingsLists?.[0]?.DriverStandings || [];
+      const constructorList = constructorData?.MRData?.StandingsTable?.StandingsLists?.[0]?.ConstructorStandings || [];
+      state.standings = { drivers: driverList, constructors: constructorList, fetchedAt: new Date(), error: null };
+    } catch (err) {
+      state.standings.error = err.message;
+    }
+    renderStandingsTab();
+  }
+
+  async function maybeLoadTrackSvg() {
+    const circuitId = CIRCUIT_ID_MAP[state.circuitShortName];
+    if (!circuitId) {
+      state.circuitSvgCache.set(state.circuitShortName || '__unknown__', null);
+      renderTrackTab();
+      return;
+    }
+    if (state.circuitSvgCache.has(circuitId)) {
+      renderTrackTab();
+      return;
+    }
+    try {
+      const listing = await fetchJSON(F1DB_CIRCUITS_API);
+      const match = (listing || []).find((f) => f.name.startsWith(`${circuitId}-`) && f.name.endsWith('.svg'));
+      if (!match) {
+        state.circuitSvgCache.set(circuitId, null);
+      } else {
+        const svgText = await fetch(match.download_url).then((r) => r.text());
+        state.circuitSvgCache.set(circuitId, svgText);
+      }
+    } catch (err) {
+      state.circuitSvgCache.set(circuitId, null);
+    }
+    renderTrackTab();
+  }
+
+  /* =========================================================================
+   * RENDERERS
+   * ========================================================================= */
+
+  function updateConnectionUI() {
+    const dot = document.getElementById('conn-dot');
+    const label = document.getElementById('conn-label');
+    dot.classList.remove('live', 'retrying', 'offline');
+
+    if (state.connectionFailures >= FAILURE_RETRY_THRESHOLD) {
+      dot.classList.add('offline');
+      label.textContent = 'Connection lost';
+    } else if (state.connectionFailures > 0) {
+      dot.classList.add('retrying');
+      label.textContent = `Retrying (${state.connectionFailures})…`;
+    } else if (!state.isLive) {
+      dot.classList.add('offline');
+      label.textContent = 'No live session';
+    } else {
+      dot.classList.add('live');
+      label.textContent = 'Live';
+    }
+  }
+
+  function updateFallbackBanner() {
+    const banner = document.getElementById('fallback-banner');
+    const text = document.getElementById('fallback-text');
+    const statusPill = document.getElementById('session-status');
+
+    if (state.connectionFailures >= FAILURE_RETRY_THRESHOLD) {
+      banner.classList.remove('hidden');
+      text.textContent = 'Lost connection to OpenF1 — retrying in the background.';
+      statusPill.textContent = 'offline';
+      statusPill.className = 'pill ended';
+      return;
+    }
+
+    if (state.isLive) {
+      banner.classList.add('hidden');
+      statusPill.textContent = 'live';
+      statusPill.className = 'pill live';
+      return;
+    }
+
+    banner.classList.remove('hidden');
+    if (state.sessionInfo) {
+      const name = state.sessionInfo.session_name || 'session';
+      const ended = new Date() > new Date(state.sessionInfo.date_end);
+      text.textContent = ended
+        ? `No session is currently live. Showing last data from ${name}.`
+        : `Next up: ${name}, starting ${new Date(state.sessionInfo.date_start).toLocaleString()}.`;
+      statusPill.textContent = ended ? 'ended' : 'upcoming';
+      statusPill.className = `pill ${ended ? 'ended' : 'upcoming'}`;
+    } else if (state.connectionFailures > 0) {
+      text.textContent = 'Waiting to hear back from OpenF1…';
+      statusPill.textContent = 'connecting';
+      statusPill.className = 'pill upcoming';
+    } else {
+      text.textContent = 'No live session found.';
+      statusPill.textContent = 'offline';
+      statusPill.className = 'pill ended';
+    }
+  }
+
+  function renderTopStrip() {
+    const nameEl = document.getElementById('session-name');
+    const circuitEl = document.getElementById('circuit-name');
+    if (state.sessionInfo) {
+      nameEl.textContent = `${state.sessionInfo.session_name} — ${state.sessionInfo.location || ''}`;
+      circuitEl.textContent = state.sessionInfo.circuit_short_name || '';
+    }
+  }
+
+  function renderWeatherChips() {
+    const el = document.getElementById('weather-chips');
+    const w = state.weather;
+    if (!w) { el.innerHTML = ''; return; }
+    el.innerHTML = `
+      <span>Air ${w.air_temperature?.toFixed(1)}°C</span>
+      <span>Track ${w.track_temperature?.toFixed(1)}°C</span>
+      <span>Humidity ${w.humidity?.toFixed(0)}%</span>
+      <span>Wind ${w.wind_speed?.toFixed(1)}m/s</span>
+      ${w.rainfall ? '<span class="rain">RAIN</span>' : ''}
+    `;
+  }
+
+  function renderRaceControlStrip() {
+    const track = document.getElementById('rc-track');
+    if (!state.raceControl.length) {
+      track.innerHTML = '<span class="rc-empty">No race control messages yet.</span>';
+      return;
+    }
+    track.innerHTML = state.raceControl.map((m) => {
+      const flagClass = m.flag ? `flag-${String(m.flag).toLowerCase().replace(/\s+/g, '')}` : '';
+      const driver = m.driver_number ? state.drivers.get(m.driver_number) : null;
+      const who = driver ? ` ${driverLabel(driver, m.driver_number)}` : '';
+      return `<span class="rc-item ${flagClass}"><span class="rc-lap">${m.lap_number ? `L${m.lap_number}` : ''}</span>${who} ${escapeHtml(m.message || m.category || '')}</span>`;
+    }).join('');
+    track.scrollLeft = track.scrollWidth;
+  }
+
+  function renderLeaderboard() {
+    const el = document.getElementById('leaderboard-body');
+    if (!state.positions.length) {
+      el.innerHTML = '<div class="empty-state">No timing data yet.</div>';
+      return;
+    }
+    el.innerHTML = state.positions.map((pos) => {
+      const driver = state.drivers.get(pos.driver_number);
+      const color = driverColor(driver);
+      const interval = state.intervalsByDriver.get(pos.driver_number);
+      const stint = state.stintsByDriver.get(pos.driver_number);
+      const compound = stint?.compound;
+      const compoundClass = TYRE_COLOR_CLASS[compound] || 'compound-unknown';
+      const selected = pos.driver_number === state.selectedDriver;
+      return `
+        <div class="lb-row ${selected ? 'selected' : ''}" style="border-left-color:${selected ? 'var(--accent)' : color}" data-driver="${pos.driver_number}">
+          <span class="lb-pos">${pos.position}</span>
+          <span class="lb-number" style="color:${color}">${pos.driver_number}</span>
+          <span class="lb-name">${escapeHtml(driverLabel(driver, pos.driver_number))}</span>
+          ${compound ? `<span class="tyre-badge ${compoundClass}" title="${compound} — age ${stint.tyre_age_at_start ?? '?'} laps">${compound[0]}<span class="tyre-age">${stint.tyre_age_at_start ?? ''}</span></span>` : '<span></span>'}
+          <span class="lb-gap">${pos.position === 1 ? fmtGap(null) : fmtInterval(interval?.gap_to_leader)}</span>
+        </div>
+      `;
+    }).join('');
+
+    el.querySelectorAll('.lb-row').forEach((row) => {
+      row.addEventListener('click', () => selectDriver(Number(row.dataset.driver)));
+    });
+  }
+
+  function selectDriver(driverNumber) {
+    if (state.selectedDriver === driverNumber) return;
+    state.selectedDriver = driverNumber;
+    state.carDataBuffer.delete(driverNumber);
+    renderLeaderboard();
+    renderTelemetryTab();
+    renderTrackTab();
+    Scheduler.bump('carData');
+    Scheduler.bump('laps');
+  }
+
+  function renderTelemetryTab() {
+    const el = document.getElementById('telemetry-content');
+    const driver = state.drivers.get(state.selectedDriver);
+    if (!state.selectedDriver) {
+      el.innerHTML = '<div class="empty-state">Select a driver from the leaderboard.</div>';
+      return;
+    }
+    const color = driverColor(driver);
+    const buf = state.carDataBuffer.get(state.selectedDriver) || [];
+    const latest = buf.length ? buf[buf.length - 1] : null;
+    const lastLap = state.lastLap.get(state.selectedDriver);
+
+    // OpenF1 drs codes: 0/1 = off, 8 = eligible but closed, 10/12/14 = open.
+    const drs = latest?.drs;
+    const drsOn = [10, 12, 14].includes(drs);
+    const drsEligible = drs === 8;
+    const drsClass = drsOn ? 'drs-on' : drsEligible ? 'drs-eligible' : 'drs-off';
+    const drsText = drsOn ? 'OPEN' : drsEligible ? 'ELIGIBLE' : 'CLOSED';
+
+    el.innerHTML = `
+      <div class="driver-header">
+        <div class="driver-swatch" style="background:${color}"></div>
+        <div>
+          <h2>${escapeHtml(driverLabel(driver, state.selectedDriver))} <span style="color:var(--text-2);font-size:12px;">#${state.selectedDriver}</span></h2>
+          <div class="team">${escapeHtml(driver?.team_name || '')}</div>
+        </div>
+      </div>
+
+      <div class="gauge-grid">
+        <div class="gauge">
+          <div class="gauge-label">Speed</div>
+          <div class="gauge-value">${latest ? Math.round(latest.speed) : '—'}<span class="gauge-unit">km/h</span></div>
+          <div class="gauge-bar-track"><div class="gauge-bar-fill" style="width:${latest ? Math.min(100, latest.speed / 360 * 100) : 0}%"></div></div>
+        </div>
+        <div class="gauge">
+          <div class="gauge-label">Throttle</div>
+          <div class="gauge-value">${latest ? Math.round(latest.throttle) : '—'}<span class="gauge-unit">%</span></div>
+          <div class="gauge-bar-track"><div class="gauge-bar-fill throttle" style="width:${latest ? latest.throttle : 0}%"></div></div>
+        </div>
+        <div class="gauge">
+          <div class="gauge-label">Brake</div>
+          <div class="gauge-value">${latest ? (latest.brake > 0 ? 'ON' : 'OFF') : '—'}</div>
+          <div class="gauge-bar-track"><div class="gauge-bar-fill brake" style="width:${latest ? latest.brake : 0}%"></div></div>
+        </div>
+        <div class="gauge">
+          <div class="gauge-label">Gear</div>
+          <div class="gauge-value">${latest ? (latest.n_gear || 'N') : '—'}</div>
+        </div>
+        <div class="gauge">
+          <div class="gauge-label">RPM</div>
+          <div class="gauge-value">${latest ? Math.round(latest.rpm) : '—'}</div>
+          <div class="gauge-bar-track"><div class="gauge-bar-fill" style="width:${latest ? Math.min(100, latest.rpm / 15000 * 100) : 0}%"></div></div>
+        </div>
+        <div class="gauge ${drsClass}">
+          <div class="gauge-label">DRS</div>
+          <div class="gauge-value">${latest ? drsText : '—'}</div>
+        </div>
+      </div>
+
+      <div class="sparkline-box">
+        <div class="gauge-label">Speed — last 60s</div>
+        ${renderSparkline(buf)}
+      </div>
+
+      <div class="lap-readout">
+        <div>
+          <div class="stat-label">Last lap</div>
+          <div class="stat-value">${lastLap ? fmtLapTime(lastLap.lap_duration) : '—'}</div>
+        </div>
+        <div>
+          <div class="stat-label">Lap number</div>
+          <div class="stat-value">${lastLap ? lastLap.lap_number : '—'}</div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderSparkline(buf) {
+    if (!buf.length) return '<div class="empty-state">No telemetry yet.</div>';
+    const speeds = buf.map((p) => p.speed).filter((s) => typeof s === 'number');
+    if (!speeds.length) return '<div class="empty-state">No telemetry yet.</div>';
+    const min = Math.min(...speeds);
+    const max = Math.max(...speeds) || 1;
+    const span = (max - min) || 1;
+    const w = 600, h = 60, pad = 4;
+    const points = buf.map((p, i) => {
+      const x = (i / (buf.length - 1 || 1)) * (w - pad * 2) + pad;
+      const y = h - pad - ((p.speed - min) / span) * (h - pad * 2);
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(' ');
+    return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><polyline points="${points}" fill="none" stroke="var(--accent)" stroke-width="2" /></svg>`;
+  }
+
+  function renderTrackTab() {
+    const container = document.getElementById('track-svg-container');
+    const overlay = document.getElementById('track-overlay');
+    const note = document.getElementById('track-note');
+    const circuitId = CIRCUIT_ID_MAP[state.circuitShortName];
+    const svgText = circuitId ? state.circuitSvgCache.get(circuitId) : null;
+
+    if (!svgText) {
+      container.innerHTML = '';
+      overlay.innerHTML = '';
+      note.textContent = circuitId
+        ? 'Circuit map unavailable for this track.'
+        : 'Circuit map will appear once a session is live.';
+      return;
+    }
+
+    if (container.dataset.circuit !== circuitId) {
+      container.innerHTML = svgText;
+      container.dataset.circuit = circuitId;
+      const svgEl = container.querySelector('svg');
+      const vb = svgEl?.getAttribute('viewBox');
+      if (vb) {
+        const [x, y, w, h] = vb.split(/\s+/).map(Number);
+        state.trackViewBox = { x, y, w, h };
+      } else {
+        state.trackViewBox = { x: 0, y: 0, w: 1000, h: 1000 };
+      }
+      overlay.setAttribute('viewBox', vb || '0 0 1000 1000');
+    }
+
+    if (!state.isLive || !state.locationByDriver.size || !state.trackBounds) {
+      overlay.innerHTML = '';
+      note.textContent = state.isLive ? 'Waiting for car location data…' : 'No live session — showing circuit map only.';
+      return;
+    }
+
+    note.textContent = '';
+    const b = state.trackBounds;
+    const vb = state.trackViewBox;
+    const spanX = (b.maxX - b.minX) || 1;
+    const spanY = (b.maxY - b.minY) || 1;
+    const padRatio = 0.08;
+
+    const circles = [...state.locationByDriver.entries()].map(([driverNumber, loc]) => {
+      const driver = state.drivers.get(driverNumber);
+      const color = driverColor(driver);
+      const nx = (loc.x - b.minX) / spanX;
+      // Empirical fallback: OpenF1 /location's (x,y) plane orientation
+      // relative to the F1DB SVG viewBox isn't published, so this proportionally
+      // scatters points into the viewBox and flips Y (SVG grows downward).
+      // May need a per-circuit rotation/flip correction against real data.
+      const ny = 1 - (loc.y - b.minY) / spanY;
+      const px = vb.x + (vb.w * padRatio) + nx * vb.w * (1 - padRatio * 2);
+      const py = vb.y + (vb.h * padRatio) + ny * vb.h * (1 - padRatio * 2);
+      const selected = driverNumber === state.selectedDriver;
+      const ring = selected ? `<circle cx="${px}" cy="${py}" r="${vb.w * 0.018}" fill="none" stroke="var(--accent)" stroke-width="${vb.w * 0.003}" />` : '';
+      return `${ring}<circle cx="${px}" cy="${py}" r="${vb.w * 0.01}" fill="${color}" />`;
+    }).join('');
+
+    overlay.innerHTML = circles;
+  }
+
+  function renderTyresPitsTab() {
+    const el = document.getElementById('tyres-content');
+    const stintRows = [...state.stintsByDriver.entries()]
+      .map(([num, stint]) => ({ num, stint, driver: state.drivers.get(num) }))
+      .sort((a, b) => a.num - b.num);
+
+    const stintTable = stintRows.length ? `
+      <table class="data-table">
+        <thead><tr><th>Driver</th><th>Compound</th><th>Age (laps)</th><th>Stint</th></tr></thead>
+        <tbody>
+          ${stintRows.map((r) => `
+            <tr>
+              <td style="color:${driverColor(r.driver)}">${escapeHtml(driverLabel(r.driver, r.num))}</td>
+              <td>${r.stint.compound || '—'}</td>
+              <td>${r.stint.tyre_age_at_start ?? '—'}</td>
+              <td>#${r.stint.stint_number}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>` : '<div class="empty-state">No stint data yet.</div>';
+
+    const pitTable = state.pitLog.length ? `
+      <table class="data-table">
+        <thead><tr><th>Driver</th><th>Lap</th><th>Duration</th></tr></thead>
+        <tbody>
+          ${state.pitLog.map((p) => {
+            const driver = state.drivers.get(p.driver_number);
+            return `
+              <tr>
+                <td style="color:${driverColor(driver)}">${escapeHtml(driverLabel(driver, p.driver_number))}</td>
+                <td>${p.lap_number ?? '—'}</td>
+                <td>${p.pit_duration ? p.pit_duration.toFixed(1) + 's' : '—'}</td>
+              </tr>`;
+          }).join('')}
+        </tbody>
+      </table>` : '<div class="empty-state">No pit stops yet.</div>';
+
+    el.innerHTML = `
+      <div class="section-label">Current stints</div>
+      ${stintTable}
+      <div class="section-label">Pit stop log</div>
+      ${pitTable}
+    `;
+  }
+
+  function renderStandingsTab() {
+    const el = document.getElementById('standings-content');
+    const { drivers, constructors, fetchedAt, error } = state.standings;
+
+    if (!drivers && !constructors) {
+      el.innerHTML = error
+        ? `<div class="empty-state">Standings unavailable: ${escapeHtml(error)}</div>`
+        : '<div class="empty-state">Loading standings…</div>';
+      return;
+    }
+
+    const driverRows = (drivers || []).map((d) => `
+      <tr>
+        <td>${d.position}</td>
+        <td>${escapeHtml(`${d.Driver.givenName[0]}. ${d.Driver.familyName}`)}</td>
+        <td>${escapeHtml(d.Constructors?.[0]?.name || '')}</td>
+        <td>${d.points}</td>
+      </tr>`).join('');
+
+    const constructorRows = (constructors || []).map((c) => `
+      <tr>
+        <td>${c.position}</td>
+        <td>${escapeHtml(c.Constructor.name)}</td>
+        <td>${c.points}</td>
+      </tr>`).join('');
+
+    el.innerHTML = `
+      <div class="standings-grid">
+        <div>
+          <div class="section-label">Drivers</div>
+          <table class="data-table">
+            <thead><tr><th>#</th><th>Driver</th><th>Team</th><th>Pts</th></tr></thead>
+            <tbody>${driverRows || '<tr><td colspan="4">—</td></tr>'}</tbody>
+          </table>
+        </div>
+        <div>
+          <div class="section-label">Constructors</div>
+          <table class="data-table">
+            <thead><tr><th>#</th><th>Team</th><th>Pts</th></tr></thead>
+            <tbody>${constructorRows || '<tr><td colspan="3">—</td></tr>'}</tbody>
+          </table>
+        </div>
+      </div>
+      ${error ? `<div class="stale-note">Live refresh failed — showing data from ${fetchedAt ? fetchedAt.toLocaleTimeString() : 'earlier'}. (${escapeHtml(error)})</div>` : ''}
+      ${fetchedAt && !error ? `<div class="stale-note" style="color:var(--text-2)">Updated ${fetchedAt.toLocaleTimeString()}</div>` : ''}
+    `;
+  }
+
+  function renderRadioTab() {
+    const el = document.getElementById('radio-content');
+    if (!state.radioMessages.length) {
+      el.innerHTML = '<div class="empty-state">No radio messages yet.</div>';
+      return;
+    }
+    el.innerHTML = state.radioMessages.map((m) => {
+      const driver = state.drivers.get(m.driver_number);
+      return `
+        <div class="radio-item">
+          <div class="radio-meta" style="color:${driverColor(driver)}">
+            ${escapeHtml(driverLabel(driver, m.driver_number))}<br>
+            <span style="color:var(--text-2)">${new Date(m.date).toLocaleTimeString()}</span>
+          </div>
+          <audio controls preload="none" src="${m.recording_url}"></audio>
+        </div>
+      `;
+    }).join('');
+  }
+
+  /* =========================================================================
+   * TABS
+   * ========================================================================= */
+
+  document.querySelectorAll('.tab-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const tab = btn.dataset.tab;
+      if (tab === state.currentTab) return;
+      state.currentTab = tab;
+      document.querySelectorAll('.tab-btn').forEach((b) => b.classList.toggle('active', b === btn));
+      document.querySelectorAll('.tab-panel').forEach((p) => p.classList.toggle('active', p.id === `panel-${tab}`));
+      Scheduler.bumpTab(tab);
+      if (tab === 'track') maybeLoadTrackSvg();
+    });
+  });
+
+  /* =========================================================================
+   * BOOT
+   * ========================================================================= */
+
+  function boot() {
+    Scheduler.register('session', { tier: TIER_META, run: detectSession });
+    Scheduler.register('drivers', { tier: TIER_META, run: fetchDrivers, immediate: false });
+    Scheduler.register('positions', { tier: TIER_FAST, run: fetchPositions, immediate: false });
+    Scheduler.register('intervals', { tier: TIER_FAST, run: fetchIntervals, immediate: false });
+    Scheduler.register('carData', { tier: TIER_FAST, run: fetchCarData, tab: 'telemetry', immediate: false });
+    Scheduler.register('laps', { tier: TIER_MEDIUM, run: fetchLaps, tab: 'telemetry', immediate: false });
+    Scheduler.register('stints', { tier: TIER_MEDIUM, run: fetchStints, immediate: false });
+    Scheduler.register('pit', { tier: TIER_MEDIUM, run: fetchPit, immediate: false });
+    Scheduler.register('weather', { tier: TIER_SLOW, run: fetchWeather, immediate: false });
+    Scheduler.register('raceControl', { tier: TIER_SLOW, run: fetchRaceControl, immediate: false });
+    Scheduler.register('location', { tier: TIER_FAST, run: fetchLocation, tab: 'track', immediate: false });
+    Scheduler.register('teamRadio', { tier: TIER_MEDIUM, run: fetchTeamRadio, tab: 'radio', immediate: false });
+    Scheduler.register('standings', { tier: TIER_STANDINGS, run: fetchStandings, tab: 'standings' });
+    Scheduler.start();
+  }
+
+  boot();
+})();
+</script>
+</body>
+</html>
