@@ -530,15 +530,31 @@
   const JOLPICA_BASE = 'https://api.jolpi.ca/ergast/f1';
   const F1DB_CIRCUITS_API = 'https://api.github.com/repos/f1db/f1db/contents/src/assets/circuits/black-outline';
 
-  // Poll tiers (ms). Budget check against OpenF1's ~30 req/10s limit:
-  // worst case is the Telemetry tab active -> 3 fast tasks every 4s (~2.5
-  // req/10s each = ~7.5/10s) + 3 medium tasks every 15s (~2/10s) + 2 slow
-  // + 2 meta, comfortably under the ceiling even with polling jitter.
-  const TIER_FAST = 4000;     // positions, intervals, car_data (selected driver), location (Track tab)
-  const TIER_MEDIUM = 15000;  // laps (selected driver), stints, pit, team_radio (Radio tab)
-  const TIER_SLOW = 60000;    // weather, race_control
+  // Poll tiers (ms). OpenF1's free tier allows 3 requests/s and 30/min
+  // (https://openf1.org/auth.html), so the plan below stays near 22/min on the
+  // busiest tab and the request pacer in fetchJSON() enforces the hard limits:
+  //   positions + intervals every 10 s ........ 12/min
+  //   car_data (Telemetry) or location (Track) .  4/min (one tab at a time)
+  //   laps, selected driver (Telemetry) .......  2/min
+  //   stints, pit, race_control ...............  3/min
+  //   team_radio (Radio tab) ..................  1/min
+  //   weather .................................  0.5/min
+  //   session, drivers ........................  ~0.2/min
+  const TIER_FAST = 10000;    // positions, intervals
+  const TIER_FOCUS = 15000;   // car_data (selected driver), location (Track tab)
+  const TIER_MEDIUM = 30000;  // laps (selected driver)
+  const TIER_SLOW = 60000;    // stints, pit, race_control, team_radio (Radio tab)
+  const TIER_WEATHER = 120000;
   const TIER_META = 600000;   // drivers, session/meeting info
   const TIER_STANDINGS = 600000; // Jolpica, not session-scoped
+
+  // Request pacer for OpenF1 (free tier: 3 req/s, 30 req/min). Keeps a gap
+  // between requests, a rolling one-minute budget with headroom for other
+  // apps on the same connection (like the Xeneon Edge PIT WALL widget), and
+  // backs off after a 429.
+  const OPENF1_MIN_GAP_MS = 400;
+  const OPENF1_PER_MINUTE = 26;
+  const OPENF1_BACKOFF_MS = 15000;
 
   const SPARKLINE_WINDOW_MS = 60000;
   const FAILURE_RETRY_THRESHOLD = 3; // consecutive failures before "offline"
@@ -642,11 +658,43 @@
       .join('&');
   }
 
+  const pacer = { queue: [], sent: [], nextAt: 0, timer: null };
+
+  // Resolves when this request may go out without breaking OpenF1's limits.
+  function openF1Slot() {
+    return new Promise((resolve) => {
+      pacer.queue.push(resolve);
+      pumpPacer();
+    });
+  }
+
+  function pumpPacer() {
+    if (pacer.timer || !pacer.queue.length) return;
+    const now = Date.now();
+    pacer.sent = pacer.sent.filter((t) => now - t < 60000);
+    let wait = Math.max(0, pacer.nextAt - now);
+    if (pacer.sent.length >= OPENF1_PER_MINUTE) wait = Math.max(wait, pacer.sent[0] + 60000 - now);
+    pacer.timer = setTimeout(() => {
+      pacer.timer = null;
+      const go = pacer.queue.shift();
+      if (go) {
+        const t = Date.now();
+        pacer.sent.push(t);
+        pacer.nextAt = Math.max(pacer.nextAt, t + OPENF1_MIN_GAP_MS);
+        go();
+      }
+      pumpPacer();
+    }, wait);
+  }
+
   async function fetchJSON(url, opts) {
+    const paced = url.startsWith(OPENF1_BASE);
+    if (paced) await openF1Slot();
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 8000);
     try {
       const res = await fetch(url, { signal: controller.signal, ...(opts || {}) });
+      if (res.status === 429 && paced) pacer.nextAt = Date.now() + OPENF1_BACKOFF_MS;
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return await res.json();
     } finally {
@@ -721,15 +769,19 @@
     let timer = null;
 
     function register(id, { tier, run, tab, immediate }) {
-      tasks.set(id, { tier, run, tab: tab || null, lastRun: 0 });
+      tasks.set(id, { tier, run, tab: tab || null, lastRun: 0, running: false });
       if (immediate !== false) runTask(id);
     }
 
     function runTask(id) {
       const t = tasks.get(id);
-      if (!t) return;
+      if (!t || t.running) return; // still waiting on the pacer or the network
       t.lastRun = Date.now();
-      Promise.resolve(t.run()).catch((err) => console.error(`[scheduler:${id}]`, err));
+      t.running = true;
+      Promise.resolve()
+        .then(() => t.run())
+        .catch((err) => console.error(`[scheduler:${id}]`, err))
+        .finally(() => { t.running = false; });
     }
 
     function tick() {
@@ -1411,14 +1463,14 @@
     Scheduler.register('drivers', { tier: TIER_META, run: fetchDrivers, immediate: false });
     Scheduler.register('positions', { tier: TIER_FAST, run: fetchPositions, immediate: false });
     Scheduler.register('intervals', { tier: TIER_FAST, run: fetchIntervals, immediate: false });
-    Scheduler.register('carData', { tier: TIER_FAST, run: fetchCarData, tab: 'telemetry', immediate: false });
+    Scheduler.register('carData', { tier: TIER_FOCUS, run: fetchCarData, tab: 'telemetry', immediate: false });
     Scheduler.register('laps', { tier: TIER_MEDIUM, run: fetchLaps, tab: 'telemetry', immediate: false });
-    Scheduler.register('stints', { tier: TIER_MEDIUM, run: fetchStints, immediate: false });
-    Scheduler.register('pit', { tier: TIER_MEDIUM, run: fetchPit, immediate: false });
-    Scheduler.register('weather', { tier: TIER_SLOW, run: fetchWeather, immediate: false });
+    Scheduler.register('stints', { tier: TIER_SLOW, run: fetchStints, immediate: false });
+    Scheduler.register('pit', { tier: TIER_SLOW, run: fetchPit, immediate: false });
+    Scheduler.register('weather', { tier: TIER_WEATHER, run: fetchWeather, immediate: false });
     Scheduler.register('raceControl', { tier: TIER_SLOW, run: fetchRaceControl, immediate: false });
-    Scheduler.register('location', { tier: TIER_FAST, run: fetchLocation, tab: 'track', immediate: false });
-    Scheduler.register('teamRadio', { tier: TIER_MEDIUM, run: fetchTeamRadio, tab: 'radio', immediate: false });
+    Scheduler.register('location', { tier: TIER_FOCUS, run: fetchLocation, tab: 'track', immediate: false });
+    Scheduler.register('teamRadio', { tier: TIER_SLOW, run: fetchTeamRadio, tab: 'radio', immediate: false });
     Scheduler.register('standings', { tier: TIER_STANDINGS, run: fetchStandings, tab: 'standings' });
     Scheduler.start();
   }
